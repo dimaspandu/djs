@@ -1,72 +1,78 @@
-# Runtime Test Suite
+# DJS (Distributed JavaScript Modules)
 
-This folder contains versioned runtime environments for the JavaScript bundler engine.  
-Each version folder (e.g., `1.0.1`, `1.0.2`, `1.0.3`) includes a `run.test.js` file to verify the integrity and functionality of the runtime and its generated template code.
+DJS is a lightweight, modular JavaScript execution model designed for
+browser-based runtimes, bundlers, and compilers. It provides an
+isolated, spec-like environment for resolving modules, evaluating code,
+and handling versioned distributions. Each version folder (e.g.,
+`1.0.0`, `1.1.0`) contains self-contained module logic, enabling
+predictable and reproducible builds.
 
----
+## Features
+
+-   Distributed JavaScript module execution.
+-   Versioned module directories for stable runtime behavior.
+-   Runtime-friendly architecture for custom bundlers and compilers.
+-   Sandboxed evaluation for browser execution.
+-   Support for mocks, HTTP-based module loading, and environment
+    simulation.
+
+## Folder Structure Example
+
+    djs/
+    ├─ 1.0.0/
+    │  ├─ dynamic/
+    │  ├─ resources/
+    │  ├─ env.mock.js
+    │  ├─ run.test.js
+    │  ├─ runtime.js
+    │  └─ template.js
+    ├─ 1.1.0/
+    │  ├─ ...
+    │  LICENSE
+    └─ README.md
 
 ## Structure Overview
 
 Each runtime version contains:
-- **runtime.js** — the main runtime template that defines module loading, registration, and execution logic.
+- **dynamic/** (optional) — holds dynamic modules that simulate asynchronous loading.
+- **resources/** (optional) — holds external modules that simulate asynchronous loading.
 - **env.mock.js** — environment mock file used for isolated testing.
 - **run.test.js** — executes the runtime to validate module registration, exports, and dynamic import behavior.
-- **dynamic/** (optional) — holds dynamic modules that simulate asynchronous loading.
-- **template.js** (in 1.0.3) — represents the generated runtime structure for comparison or debugging purposes.
+- **runtime.js** — the main runtime template that defines module loading, registration, and execution logic.
+- **template.js** represents the generated runtime structure for comparison or debugging purposes.
 
----
+## Usage
 
-## Test Utility
+Each version folder contains an independent implementation of the DJS
+runtime. This allows tools such as bundlers, compilers, or in-browser
+engines to depend on a specific runtime version.
 
-Each `run.test.js` uses the same testing skeleton:
+Example usage inside a bundler:
 
-```js
-function runTest(name, input, expected, final = false) {
-  // Normalizes input and expected output
-  // Compares results and logs PASS/FAIL
-  // Aggregates and prints summary when `final` is true
-}
+``` js
+import DJSRuntime from "./djs/1.0.0/index.js";
+
+const runtime = new DJSRuntime();
+runtime.execute(`
+  export const x = 10;
+  export default () => x * 2;
+`);
 ```
 
-The `runTest` function ensures consistent verification across runtime versions, ignoring trivial formatting differences and focusing on structural correctness.
+## Mocking and Testing
 
----
+The project includes a mock environment for deterministic testing. Mocks
+allow simulation of:
 
-## Version Summaries
+-   Global variables
+-   Network-based module loading
+-   Timers and async behavior
 
-### Version 1.0.1
-**Focus:** Basic runtime validation  
-Tests ensure:
-- Proper export handling in static modules.
-- JSON and JS module integration.
+Example mock initialization:
 
-**Result:**
+``` js
+node 1.0.0/run.test.js
 ```
-Greetings Module Exported Value: PASS
-Greeting Module Default Export: PASS
-Colors Module Default Export Object: PASS
-All tests passed (100% success)
-```
-
-### Version 1.0.2
-**Focus:** Dynamic imports and modular separation  
-Tests ensure:
-- Dynamic loading of JSON and CSS modules.
-- Continued support for static synchronous modules.
-
-**Result:**
-```
-Greeting Module Default Export: PASS
-Colors Module Dynamic JSON: PASS
-Styles Module Dynamic CSS: PASS
-All tests passed (100% success)
-```
-
-### Version 1.0.3
-**Focus:** RPC and hybrid module execution  
-Tests ensure:
-- RPC module returns expected output.
-- Dynamic and static modules interact seamlessly.
 
 **Result:**
 ```
@@ -77,14 +83,16 @@ Styles Module Dynamic CSS: PASS
 All tests passed (100% success)
 ```
 
----
-
 ## Purpose
 
-The **runtime test suite** verifies that the bundler engine’s generated runtime:
+Verifies that the bundler engine’s generated runtime:
 1. Works across versions with backward compatibility.
 2. Correctly loads both static and dynamic modules.
 3. Supports hybrid environments (bundled and browser-native ESM).
 4. Provides consistent results across updates.
 
 Each runtime iteration adds or refines support for new module patterns, ensuring reliability and maintainability in production bundling.
+
+## License
+
+MIT
