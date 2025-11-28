@@ -50,13 +50,31 @@ engines to depend on a specific runtime version.
 Example usage inside a bundler:
 
 ``` js
-import DJSRuntime from "./djs/1.0.0/index.js";
+/**
+ * RUNTIME_CODE(host)
+ * -------------------
+ * Returns the runtime code as a string literal.
+ */
+const RUNTIME_CODE = (host, modules, entry) => {
+  const runtimeTemplatePath = path.join(__dirname, "djs/1.0.0/template.js");
 
-const runtime = new DJSRuntime();
-runtime.execute(`
-  export const x = 10;
-  export default () => x * 2;
-`);
+  logger.info("[RUNTIME] Loading runtime template:", runtimeTemplatePath);
+
+  let template = fs.readFileSync(runtimeTemplatePath, "utf-8");
+
+  // Determine host string
+  const injectedHost = host !== undefined
+    ? JSON.stringify(host)
+    : "getHostFromCurrentUrl()"; // use runtime function fallback
+
+  // Inject values into template
+  template = template
+    .replace(/__INJECT_MODULES__/g, modules)
+    .replace(/__INJECT_ENTRY__/g, entry)
+    .replace(/__INJECT_HOST__/g, injectedHost);
+
+  return stripComments(template);
+};
 ```
 
 ## Mocking and Testing
