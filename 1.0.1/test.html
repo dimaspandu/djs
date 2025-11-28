@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Client Testing - 1.0.1</title>
+</head>
+<body>
+  <h1>Client Testing - 1.0.1</h1>
+  <script>
+    /**
+     * Normalize string for comparison:
+     * - Convert CRLF to LF
+     * - Preserve newlines at start/end
+     */
+    function normalize(str) {
+      return str.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
+    }
+
+    // Setup mocks first
+    const testResults = [];
+
+    /**
+     * runTest(name, input, expected, final)
+     * 
+     * Executes a single test case by comparing the provided `input` with the `expected` output.
+     * Both values are normalized using `normalize()` to avoid false negatives caused by 
+     * formatting differences (e.g., spacing, quotes, JSON formatting).
+     * 
+     * Parameters:
+     * - name (string): A descriptive name for the test case.
+     * - input (any): The actual value or result produced by the module/code.
+     * - expected (any): The expected value to compare against.
+     * - final (boolean, optional): If set to true, the function will print a summary table
+     *   of all test results recorded in `testResults` so far. Defaults to false.
+     * 
+     * Behavior:
+     * - Compares normalized input and expected values.
+     * - Stores the result as { name, pass } in `testResults`.
+     * - Prints PASS/FAIL for the current test.
+     * - If the test fails, prints actual and expected values for debugging.
+     * - If `final` is true, aggregates all test results and prints a summary table 
+     *   with total tests, passed, failed, and pass percentage per test name.
+     */
+    function runTest(name, input, expected, final = false) {
+      // Normalize both actual and expected results
+      const result = input;
+      const pass = normalize(JSON.stringify(result)) === normalize(JSON.stringify(expected));
+
+      // Store test result
+      testResults.push({ name, pass });
+
+      // Output result
+      console.log(`--- Test: ${name} ---`);
+      console.log(pass ? 'PASS' : 'FAIL');
+
+      if (!pass) {
+        console.log('--- Output ---', result);
+        console.log('--- Expected ---', expected);
+      }
+
+      if (final) {
+        // Aggregate summary by test name
+        const grouped = {};
+        for (const { name, pass } of testResults) {
+          if (!grouped[name]) grouped[name] = [];
+          grouped[name].push(pass);
+        }
+
+        const summary = Object.entries(grouped).map(([name, results]) => {
+          const total = results.length;
+          const passed = results.filter(r => r).length;
+          const failed = total - passed;
+          const percent = total === 0 ? 0 : ((passed / total) * 100).toFixed(2);
+          return { name, total, passed, failed, "pass %": percent };
+        });
+
+        console.table(summary, ["name", "total", "passed", "failed", "pass %"]);
+      }
+    }
+  </script>
+  <script src="./runtime.js"></script>
+</body>
+</html>

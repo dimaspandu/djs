@@ -74,6 +74,7 @@ Both are resolved independently from the default namespace.
     │  └─ template.js
     ├─ 1.1.0/
     │  ├─ ...
+    │  └─ test.html
     │  LICENSE
     └─ README.md
 
@@ -144,6 +145,113 @@ Styles Module Dynamic CSS: PASS
 Somewhere Dynamic Module (Microfrontend): PASS
 All tests passed (100% success)
 ```
+
+## Browser Testing (test.html)
+
+Each runtime version may include a test.html file that allows running tests directly inside a browser environment.
+This is useful for verifying that the DJS runtime behaves correctly not only in Node.js but also in real browser execution contexts such as:
+-  Live Server
+-  Static HTTP file servers
+-  Local development environments
+-  Web-based sandboxes
+
+### How It Works
+
+The browser-based tests rely on two utilities:
+1. normalize(str)
+Ensures consistent comparison of output values by:
+-  Converting CRLF → LF
+-  Normalizing multiple spaces
+-  Trimming outer whitespace
+2. runTest(name, input, expected, final?)
+A simple test runner that:
+-  Compares actual output with expected output
+-  Logs PASS/FAIL
+-  Prints debug output when tests fail
+-  Generates an aggregated summary table when `final = true`
+
+### Example `test.html`
+
+Included inside each runtime version folder:
+``` html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Client Testing - 1.0.1</title>
+</head>
+<body>
+  <h1>Client Testing - 1.0.1</h1>
+
+  <script>
+    // Normalizes string output for stable comparisons
+    function normalize(str) {
+      return str.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
+    }
+
+    const testResults = [];
+
+    // Executes a single test and logs results to the browser console
+    function runTest(name, input, expected, final = false) {
+      const result = input;
+      const pass = normalize(JSON.stringify(result)) === normalize(JSON.stringify(expected));
+
+      testResults.push({ name, pass });
+
+      console.log(`--- Test: ${name} ---`);
+      console.log(pass ? "PASS" : "FAIL");
+
+      if (!pass) {
+        console.log("Output:", result);
+        console.log("Expected:", expected);
+      }
+
+      if (final) {
+        const grouped = {};
+        for (const { name, pass } of testResults) {
+          if (!grouped[name]) grouped[name] = [];
+          grouped[name].push(pass);
+        }
+
+        const summary = Object.entries(grouped).map(([name, results]) => {
+          const total = results.length;
+          const passed = results.filter(r => r).length;
+          const failed = total - passed;
+          const percent = total === 0 ? 0 : ((passed / total) * 100).toFixed(2);
+          return { name, total, passed, failed, "pass %": percent };
+        });
+
+        console.table(summary);
+      }
+    }
+  </script>
+
+  <!-- Loads the versioned runtime -->
+  <script src="./runtime.js"></script>
+</body>
+</html>
+```
+
+### How to Run Browser Tests
+
+1. Open the folder of a specific runtime version (e.g., 1.0.1/)
+2. Start a local HTTP server such as:
+   -  VSCode Live Server
+   -  python3 -m http.server
+   -  npx http-server
+3. Open test.html in your browser
+4. Open DevTools → Console
+5. Review PASS/FAIL output and summary tables
+
+Examples that can be tested include:
+-  Static imports
+-  Dynamic import() handling
+-  Custom namespace resolution
+-  JSON/CSS/text resource loading
+-  Dynamic modules inside /dynamic/
+-  Micro-frontend modules inside custom namespaces
+
+Browser-based tests ensure parity between **Node.js testing** and **actual browser environments**, giving high confidence in module resolution and execution behavior.
 
 ## Purpose
 

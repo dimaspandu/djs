@@ -150,6 +150,19 @@
     return parts.length > 1 ? "." + parts.pop() : "";
   }
 
+  // Checks whether the given extension is supported by the runtime
+  function isSupportedExtension(ext) {
+    return (
+      ext === ".js"  ||
+      ext === ".mjs" ||
+      ext === ".json"||
+      ext === ".css" ||
+      ext === ".svg" ||
+      ext === ".xml" ||
+      ext === ".html"
+    );
+  }
+
   // Ensures generated URLs always end with `.js`
   function ensureJsExtension(outputFilePath) {
     var clean = outputFilePath.split(/[?#]/)[0];
@@ -235,9 +248,7 @@
     if (!id) return;
 
     var ext = getExt(id);
-    if (!(ext === ".js" || ext === ".mjs" || ext === ".json" ||
-          ext === ".css" || ext === ".svg" || ext === ".xml" ||
-          ext === ".html")) {
+    if (!isSupportedExtension(ext)) {
       return;
     }
 
@@ -273,9 +284,7 @@
     if (!id) return;
 
     var ext = getExt(id);
-    if (!(ext === ".js" || ext === ".mjs" || ext === ".json" ||
-          ext === ".css" || ext === ".svg" || ext === ".xml" ||
-          ext === ".html")) {
+    if (!isSupportedExtension(ext)) {
       return;
     }
 
