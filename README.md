@@ -34,6 +34,35 @@ Example:
 &::index.js
 ```
 
+Snippet:
+``` js
+(
+  typeof window !== "undefined" ? Window : this,
+  typeof window !== "undefined" ? window : this,
+  {
+    // Entry module
+    "&::entry.js": [
+      function(require, exports, module, requireByHttp) {
+        var greetings = require("./greetings.js").default;
+        console.log(greetings); // output => "Hello, World!"
+      },
+      {
+        "./greetings.js": "&::greetings.js"
+      }
+    ],
+
+    // Greetings module
+    "&::greetings.js": [
+      function(require, exports, module, requireByHttp) {
+        exports["default"] = "Hello, World!";
+      },
+      {}
+    ]
+  },
+  "&::entry.js"
+)
+```
+
 Meaning:
 -  Namespace: `&`
 -  Module path: `dynamic/rpc.js`
@@ -200,15 +229,15 @@ This is useful for verifying that the DJS runtime behaves correctly not only in 
 The browser-based tests rely on two utilities:
 1. normalize(str)
 Ensures consistent comparison of output values by:
--  Converting CRLF → LF
--  Normalizing multiple spaces
--  Trimming outer whitespace
+  -  Converting CRLF → LF
+  -  Normalizing multiple spaces
+  -  Trimming outer whitespace
 2. runTest(name, input, expected, final?)
 A simple test runner that:
--  Compares actual output with expected output
--  Logs PASS/FAIL
--  Prints debug output when tests fail
--  Generates an aggregated summary table when `final = true`
+  -  Compares actual output with expected output
+  -  Logs PASS/FAIL
+  -  Prints debug output when tests fail
+  -  Generates an aggregated summary table when `final = true`
 
 ### Example `test.html`
 
@@ -276,9 +305,9 @@ Included inside each runtime version folder:
 
 1. Open the folder of a specific runtime version (e.g., 1.0.1/)
 2. Start a local HTTP server such as:
-   -  VSCode Live Server
-   -  python3 -m http.server
-   -  npx http-server
+  -  VSCode Live Server
+  -  python3 -m http.server
+  -  npx http-server
 3. Open test.html in your browser
 4. Open DevTools → Console
 5. Review PASS/FAIL output and summary tables
