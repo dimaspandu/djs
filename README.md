@@ -120,6 +120,46 @@ const RUNTIME_CODE = (host, modules, entry) => {
 
   return stripComments(template);
 };
+
+/**
+ * bundle(graph, entryFilePath, host, includeRuntime)
+ * ---------------------------------------------------
+ * Generates the final bundle string.
+ */
+function bundle(graph, entryFilePath, host, includeRuntime) {
+  logger.info(`[BUNDLE] Building bundle for entry: ${entryFilePath}`);
+  let modules = ``;
+
+  graph.forEach((mod) => {
+    modules += `"${mod.id}": [
+      function(require, exports, module) {
+        ${mod.code}
+      },
+      ${JSON.stringify(mod.mapping)}
+    ],`;
+  });
+
+  const entryId = entryFilePath ? normalizeId(entryFilePath) : null;
+
+  if (includeRuntime) {
+    logger.info("[BUNDLE] Including runtime in bundle.");
+    return cleanUpCode(`
+      ${RUNTIME_CODE(host, `{${modules.slice(0, -1)}}`, `"${entryId}"`)}
+    `);
+  } else {
+    logger.info("[BUNDLE] Generating lightweight bundle (no runtime).");
+    return cleanUpCode(`
+      (function(global, modules, entry) {
+        global["*pointers"]("&registry")(modules);
+        global["*pointers"]("&require")(entry);
+      })(
+        typeof window !== "undefined" ? window : this,
+        {${modules.slice(0, -1)}},
+        "${entryId}"
+      );
+    `);
+  }
+}
 ```
 
 ## Mocking and Testing
