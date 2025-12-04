@@ -33,39 +33,53 @@ const testResults = [];
  *   with total tests, passed, failed, and pass percentage per test name.
  */
 function runTest(name, input, expected, final = false) {
-  // Normalize both actual and expected results
+  const RED = "\x1b[31m";
+  const GREEN = "\x1b[32m";
+  const RESET = "\x1b[0m";
+
   const result = input;
   const pass = normalize(JSON.stringify(result)) === normalize(JSON.stringify(expected));
 
-  // Store test result
   testResults.push({ name, pass });
 
-  // Output result
   console.log(`--- Test: ${name} ---`);
-  console.log(pass ? 'PASS' : 'FAIL');
+  console.log(pass ? `${GREEN}PASS${RESET}` : `${RED}FAIL${RESET}`);
 
   if (!pass) {
-    console.log('--- Output ---', result);
-    console.log('--- Expected ---', expected);
+    console.log(`${RED}--- Output ---${RESET}`, result);
+    console.log(`${RED}--- Expected ---${RESET}`, expected);
   }
 
-  if (final) {
-    // Aggregate summary by test name
-    const grouped = {};
-    for (const { name, pass } of testResults) {
-      if (!grouped[name]) grouped[name] = [];
-      grouped[name].push(pass);
-    }
+  if (!final) return;
 
-    const summary = Object.entries(grouped).map(([name, results]) => {
-      const total = results.length;
-      const passed = results.filter(r => r).length;
-      const failed = total - passed;
-      const percent = total === 0 ? 0 : ((passed / total) * 100).toFixed(2);
-      return { name, total, passed, failed, "pass %": percent };
+  // ---- Summary Table ----
+  const grouped = {};
+  for (const { name, pass } of testResults) {
+    if (!grouped[name]) grouped[name] = [];
+    grouped[name].push(pass);
+  }
+
+  const summary = Object.entries(grouped).map(([name, results]) => {
+    const total = results.length;
+    const passed = results.filter(r => r).length;
+    const failed = total - passed;
+    const percent = total === 0 ? 0 : ((passed / total) * 100).toFixed(2);
+
+    return { name, total, passed, failed, "pass %": percent };
+  });
+
+  console.table(summary);
+
+  // Print only failed rows with highlight
+  const failedRows = summary.filter(r => r.failed > 0);
+
+  if (failedRows.length > 0) {
+    console.log(`\n${RED}Failed Tests:${RESET}`);
+    failedRows.forEach(row => {
+      console.log(
+        `${RED}${row.name}${RESET} | total: ${row.total}, passed: ${row.passed}, failed: ${row.failed}, pass%: ${row["pass %"]}`
+      );
     });
-
-    console.table(summary, ["name", "total", "passed", "failed", "pass %"]);
   }
 }
 
