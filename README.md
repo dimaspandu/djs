@@ -1,337 +1,421 @@
 # DJS (Distributed JavaScript Modules)
 
-DJS is a lightweight, modular JavaScript execution model designed for browser-based runtimes, bundlers, and compilers. It provides an isolated, spec-like environment for resolving modules, evaluating code, and handling versioned distributions. Each version folder (such as `1.0.0`, `1.1.0`) contains a self-contained runtime implementation, enabling predictable and reproducible builds.
+DJS is a lightweight, versioned JavaScript runtime and module execution model designed for **browser-based runtimes, bundlers, and compiler outputs**. Each version folder (e.g. `1.0.0`, `1.0.1`, `1.0.2`) contains a **fully self-contained runtime**, allowing predictable, reproducible builds and long-term compatibility guarantees.
 
-## Features
+Starting from newer versions (≥ **1.0.2**), DJS evolves from a simple module executor into a **runtime-grade loader** with dynamic HTTP imports, CSS polyfills, micro‑frontend compatibility, and deterministic test tooling.
 
--  Distributed JavaScript module execution
--  Versioned runtime directories for stable behavior
--  Runtime-friendly architecture for bundlers and compilers
--  Sandboxed evaluation designed for browser execution
--  Support for mocks, HTTP-based loading, and environment simulation
--  Namespace-based module resolution with default and custom namespaces
+---
+
+## Key Concepts
+
+* **Runtime-first design** — optimized for generated bundles, not authoring
+* **Versioned runtimes** — behavior is locked per version
+* **Namespace-based module IDs** — avoids collisions across bundles
+* **Browser-compatible execution** — works in real browsers and mocked environments
+* **Microfrontend-friendly** — external bundles can self-register safely
+
+---
+
+## Features (Latest Runtime)
+
+* Distributed JavaScript module execution
+* Synchronous and asynchronous (`HTTP`) module loading
+* Versioned runtime directories for stable behavior
+* Namespace-based module resolution (`Namespace::path`)
+* Built-in CSSStyleSheet + `adoptedStyleSheets` polyfill
+* Dynamic `<script>` injection for remote modules
+* Internal module caching (sync + async)
+* Micro-frontend safe registry injection
+* Deterministic Node.js + Browser test parity
+
+---
 
 ## Module Namespace System
 
-DJS uses a **namespace + path** format to uniquely identify every module.
+Every module in DJS is uniquely identified by:
+
+```
+<namespace>::<path>
+```
 
 ### Default Namespace
 
-By default, all modules use the namespace:
-``` js
+The default namespace is:
+
+```js
 &
 ```
 
-Namespaces are separated from paths using:
-``` js
-::
-```
+Examples:
 
-Example:
-``` js
+```js
+&::entry.js
 &::dynamic/rpc.js
 &::resources/colors.json
-&::index.js
 ```
 
-Snippet:
-``` js
-(
-  typeof window !== "undefined" ? Window : this,
-  typeof window !== "undefined" ? window : this,
-  {
-    // Entry module
-    "&::entry.js": [
-      function(require, exports, module, requireByHttp) {
-        var greetings = require("./greetings.js").default;
-        console.log(greetings); // output => "Hello, World!"
-      },
-      {
-        "./greetings.js": "&::greetings.js"
-      }
-    ],
+The default namespace:
 
-    // Greetings module
-    "&::greetings.js": [
-      function(require, exports, module, requireByHttp) {
-        exports["default"] = "Hello, World!";
-      },
-      {}
-    ]
-  },
-  "&::entry.js"
-)
-```
+* Requires **no configuration**
+* Is always available
+* Is used by standard bundled modules
 
-Meaning:
--  Namespace: `&`
--  Module path: `dynamic/rpc.js`
-
-The default namespace requires no configuration and is always available.
+---
 
 ### Custom Namespaces
 
-DJS also supports modules registered under custom namespaces.
-These are commonly used for:
--  Dynamic CSS injection
--  Micro-frontend resources
--  External assets
--  Grouped module sets
--  Interoperability with other bundles
+Custom namespaces are designed for **dynamic assets**, **CSS**, and **micro‑frontend modules**.
 
 Examples:
-``` js
+
+```js
 DynamicCSS::dynamic/styles.css
 MicroFrontend::resources/somewhere.js
 ```
 
-In these cases:
--  `DynamicCSS` is the namespace for dynamic CSS modules
--  `MicroFrontend` is the namespace for micro-frontend resource modules
+Use cases:
 
-Both are resolved independently from the default namespace.
+* Dynamic CSS injection
+* External bundles / microfrontends
+* Isolated asset groups
+* Cross-bundle interoperability
 
-## Folder Structure Example
+Each namespace maintains its own registry entry and cache.
 
-    djs/
-    ├─ 1.0.0/
-    │  ├─ dynamic/
-    │  ├─ resources/
-    │  ├─ env.mock.js
-    │  ├─ run.test.js
-    │  ├─ runtime.js
-    │  └─ template.js
-    ├─ 1.1.0/
-    │  ├─ ...
-    │  └─ test.html
-    │  LICENSE
-    └─ README.md
+---
 
-## Structure Overview
+## Runtime Architecture (≥ 1.0.2)
 
 Each runtime version includes:
-- **dynamic/** — optional, contains modules that simulate asynchronous loading
-- **resources/** — optional, contains external assets or static modules
-- **env.mock.js** — a controlled mock environment for isolated testing
-- **run.test.js** — validates module registration, exports, namespaces, and dynamic imports
-- **runtime.js** — the core runtime implementation
-- **template.js** — a string-based template used by bundlers to inject module definitions
 
-## Usage
+* **Internal module registry** (`__modules__`)
+* **Synchronous cache** (`__modulePointer__`)
+* **Async HTTP cache** (`__asyncModulePointer__`)
+* **`require(id)`** — synchronous resolver
+* **`requireByHttp(id)`** — async HTTP-based loader
+* **`registry(modules)`** — external injection hook
 
-Bundlers often load the runtime template, inject modules, define the entrypoint, and produce the final output bundle.
+---
 
-Example usage inside a bundler:
+## Factory Function Contract
 
-``` js
-/**
- * RUNTIME_CODE(host)
- * -------------------
- * Returns the runtime code as a string literal.
- */
-const RUNTIME_CODE = (host, modules, entry) => {
-  const runtimeTemplatePath = path.join(__dirname, "djs/1.0.X/template.js");
+Every module in DJS is executed through a **factory function** with a **fixed, explicit signature**:
 
-  logger.info("[RUNTIME] Loading runtime template:", runtimeTemplatePath);
-
-  let template = fs.readFileSync(runtimeTemplatePath, "utf-8");
-
-  // Determine host string
-  const injectedHost = host !== undefined
-    ? JSON.stringify(host)
-    : "getHostFromCurrentUrl()"; // use runtime function fallback
-
-  // Inject values into template
-  template = template
-    .replace(/__INJECT_MODULES__/g, modules)
-    .replace(/__INJECT_ENTRY__/g, entry)
-    .replace(/__INJECT_HOST__/g, injectedHost);
-
-  return stripComments(template);
-};
-
-/**
- * bundle(graph, entryFilePath, host, includeRuntime)
- * ---------------------------------------------------
- * Generates the final bundle string.
- */
-function bundle(graph, entryFilePath, host, includeRuntime) {
-  logger.info(`[BUNDLE] Building bundle for entry: ${entryFilePath}`);
-  let modules = ``;
-
-  graph.forEach((mod) => {
-    modules += `"${mod.id}": [
-      function(require, exports, module) {
-        ${mod.code}
-      },
-      ${JSON.stringify(mod.mapping)}
-    ],`;
-  });
-
-  const entryId = entryFilePath ? normalizeId(entryFilePath) : null;
-
-  if (includeRuntime) {
-    logger.info("[BUNDLE] Including runtime in bundle.");
-    return cleanUpCode(`
-      ${RUNTIME_CODE(host, `{${modules.slice(0, -1)}}`, `"${entryId}"`)}
-    `);
-  } else {
-    logger.info("[BUNDLE] Generating lightweight bundle (no runtime).");
-    return cleanUpCode(`
-      (function(global, modules, entry) {
-        global["*pointers"]("&registry")(modules);
-        global["*pointers"]("&require")(entry);
-      })(
-        typeof window !== "undefined" ? window : this,
-        {${modules.slice(0, -1)}},
-        "${entryId}"
-      );
-    `);
-  }
+```js
+function (require, exports, module, requireByHttp) {
+  // module code
 }
 ```
 
-## Mocking and Testing
+This signature is **mandatory and stable across all versions**.
+Bundlers **must always emit factories with all four parameters**, even if some are unused.
 
-The environment mock allows tests to run in a deterministic, isolated context.
-It simulates:
--  Global variables
--  Network or dynamic-loading behavior
--  Timers
--  Async operations
+### Parameter Responsibilities
+
+* **`require`**
+
+  * Synchronous module resolver
+  * Used for static, intra-bundle dependencies
+
+* **`exports`**
+
+  * Named export container
+  * Compatible with CommonJS-style exports
+
+* **`module`**
+
+  * Metadata object (`{ exports }`)
+  * Enables `module.exports` interoperability and future extensions
+
+* **`requireByHttp`**
+
+  * Asynchronous loader for HTTP / remote modules
+  * Used for dynamic imports, CSS, JSON, and microfrontend bundles
+
+```js
+const feature = await requireByHttp("https://cdn.example.com/feature.js", {
+  namespace: "RemoteFeature"
+});
+```
+
+### Design Rationale
+
+The fixed factory signature provides:
+
+* Predictable code generation for bundlers
+* Zero runtime branching or feature detection
+* Safe minification and argument mangling
+* Backward compatibility across runtime versions
+* First-class support for microfrontends and lazy loading
+
+> In DJS, every module receives **all runtime capabilities by default**.
+> Using them is optional; providing them is not.
+
+---
+
+## CSS Runtime Support
+
+Newer runtimes include a **CSSStyleSheet polyfill**, enabling support for:
+
+* `new CSSStyleSheet()`
+* `replaceSync()` / `replace()`
+* `document.adoptedStyleSheets`
+
+### Behavior
+
+* **Modern browsers** → native `CSSStyleSheet`
+* **Legacy browsers** → `<style>`-based polyfill
+
+Dynamic CSS modules can export:
+
+* `exports.default` → `CSSStyleSheet` or string
+* `exports.raw` → raw CSS text (always available)
+
+This guarantees consistent styling behavior across environments.
+
+---
+
+## Folder Structure Example
+
+```
+djs/
+├─ 1.0.0/
+│  ├─ runtime.js
+│  └─ template.js
+├─ 1.0.1/
+│  ├─ runtime.js
+│  ├─ env.mock.js
+│  ├─ run.test.js
+│  └─ test.html
+├─ 1.0.2/
+│  ├─ dynamic/
+│  ├─ resources/
+│  ├─ env.mock.js
+│  ├─ run.test.js
+│  ├─ runtime.js
+│  ├─ template.js
+│  └─ test.html
+├─ LICENSE
+└─ README.md
+```
+
+---
+
+## Testing & Mock Environment
+
+DJS provides a **custom browser mock** (`env.mock.js`) that simulates:
+
+* `window` / `document`
+* `<script>` injection
+* `window.location`
+* Async dynamic imports
+
+### Test Coverage
+
+* Static module resolution
+* Async HTTP module loading
+* JSON imports
+* Dynamic CSS modules
+* Namespace isolation
+* Microfrontend external modules
 
 Run tests:
-``` js
-node 1.0.1/run.test.js
+
+```bash
+node 1.0.2/run.test.js
 ```
 
-**Result:**
-``` mathematica
-Greeting Module Default Export: PASS
-RPC Module getMessage Output: PASS
-Colors Module Dynamic JSON: PASS
-Styles Module Dynamic CSS: PASS
-Somewhere Dynamic Module (Microfrontend): PASS
-All tests passed (100% success)
+All tests are designed to behave **identically** in:
+
+* Node.js (mocked DOM)
+* Real browsers (`test.html`)
+
+---
+
+## Browser Testing
+
+Each version may include `test.html` for real browser validation.
+
+Supported environments:
+
+* Static HTTP servers
+* Live Server
+* Sandboxes
+
+Validated behaviors:
+
+* Runtime execution
+* Namespace resolution
+* CSS injection
+* Async loading consistency
+
+---
+
+## Intended Usage
+
+DJS is **not a framework**. It is a **runtime target**.
+
+Typical flow:
+
+1. Bundler loads `template.js`
+2. Injects module graph + entry ID
+3. Emits a final runtime bundle
+4. Runtime executes deterministically in browser
+
+It is ideal for:
+
+* Custom bundlers
+* Educational compilers
+* Microfrontend platforms
+* Runtime research & experimentation
+
+---
+
+## Example: Using DJS as a Custom Bundler Runtime
+
+Below is a **minimal but realistic example** of how DJS can be used as the runtime layer for a custom JavaScript bundler.
+
+### 1. Input Source Files
+
+```js
+// src/index.js
+import msg from "./message.js";
+console.log(msg);
 ```
 
-## Browser Testing (test.html)
-
-Each runtime version may include a test.html file that allows running tests directly inside a browser environment.
-This is useful for verifying that the DJS runtime behaves correctly not only in Node.js but also in real browser execution contexts such as:
--  Live Server
--  Static HTTP file servers
--  Local development environments
--  Web-based sandboxes
-
-### How It Works
-
-The browser-based tests rely on two utilities:
-1. normalize(str)
-Ensures consistent comparison of output values by:
-  -  Converting CRLF → LF
-  -  Normalizing multiple spaces
-  -  Trimming outer whitespace
-2. runTest(name, input, expected, final?)
-A simple test runner that:
-  -  Compares actual output with expected output
-  -  Logs PASS/FAIL
-  -  Prints debug output when tests fail
-  -  Generates an aggregated summary table when `final = true`
-
-### Example `test.html`
-
-Included inside each runtime version folder:
-``` html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Client Testing - 1.0.1</title>
-</head>
-<body>
-  <h1>Client Testing - 1.0.1</h1>
-
-  <script>
-    // Normalizes string output for stable comparisons
-    function normalize(str) {
-      return str.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim();
-    }
-
-    const testResults = [];
-
-    // Executes a single test and logs results to the browser console
-    function runTest(name, input, expected, final = false) {
-      const result = input;
-      const pass = normalize(JSON.stringify(result)) === normalize(JSON.stringify(expected));
-
-      testResults.push({ name, pass });
-
-      console.log(`--- Test: ${name} ---`);
-      console.log(pass ? "PASS" : "FAIL");
-
-      if (!pass) {
-        console.log("Output:", result);
-        console.log("Expected:", expected);
-      }
-
-      if (final) {
-        const grouped = {};
-        for (const { name, pass } of testResults) {
-          if (!grouped[name]) grouped[name] = [];
-          grouped[name].push(pass);
-        }
-
-        const summary = Object.entries(grouped).map(([name, results]) => {
-          const total = results.length;
-          const passed = results.filter(r => r).length;
-          const failed = total - passed;
-          const percent = total === 0 ? 0 : ((passed / total) * 100).toFixed(2);
-          return { name, total, passed, failed, "pass %": percent };
-        });
-
-        console.table(summary);
-      }
-    }
-  </script>
-
-  <!-- Loads the versioned runtime -->
-  <script src="./runtime.js"></script>
-</body>
-</html>
+```js
+// src/message.js
+export default "Hello from DJS runtime";
 ```
 
-### How to Run Browser Tests
+---
 
-1. Open the folder of a specific runtime version (e.g., 1.0.1/)
-2. Start a local HTTP server such as:
-  -  VSCode Live Server
-  -  python3 -m http.server
-  -  npx http-server
-3. Open test.html in your browser
-4. Open DevTools → Console
-5. Review PASS/FAIL output and summary tables
+### 2. Bundler Output (Generated Code)
 
-Examples that can be tested include:
--  Static imports
--  Dynamic import() handling
--  Custom namespace resolution
--  JSON/CSS/text resource loading
--  Dynamic modules inside /dynamic/
--  Micro-frontend modules inside custom namespaces
+Your bundler transforms the module graph into a DJS-compatible bundle.
+**Each module is emitted as a factory with the fixed 4-parameter contract**:
 
-Browser-based tests ensure parity between **Node.js testing** and **actual browser environments**, giving high confidence in module resolution and execution behavior.
+```js
+(function (GlobalConstructor, global, modules, entry) {
+  /* runtime.js content (copied or injected here) */
+})(
+  typeof window !== "undefined" ? Window : this,
+  typeof window !== "undefined" ? window : this,
+  {
+    "&::index.js": [
+      function (require, exports, module, requireByHttp) {
+        const msg = require("./message.js").default;
+        console.log(msg);
+      },
+      { "./message.js": "&::message.js" }
+    ],
 
-## Purpose
+    "&::message.js": [
+      function (require, exports, module, requireByHttp) {
+        exports.default = "Hello from DJS runtime";
+      },
+      {}
+    ]
+  },
+  "&::index.js"
+);
+```
 
-The testing suite ensures that each runtime version:
-1. Maintains backward compatibility
-2. Correctly loads static and dynamic modules
-3. Supports bundled execution and browser-native ESM
-4. Resolves modules using both default (&) and custom namespaces
-5. Produces consistent, predictable results across versions
+Key points:
 
-Each new version iterates on module resolution capabilities, improving stability and extensibility for production bundling workflows.
+* Factory functions **always receive 4 parameters**
+* Unused parameters are intentionally kept for contract stability
+* `requireByHttp` enables future async / remote imports without changing output shape
+
+---
+
+### 3. Lightweight Mode (Runtime Externalized)
+
+If the runtime is loaded separately (e.g. via `<script src="runtime.js">`):
+
+```js
+(function (global, modules, entry) {
+  global["*pointers"]("&registry")(modules);
+  global["*pointers"]("&require")(entry);
+})(window,
+  {
+    "&::index.js": [
+      function (require, exports, module) {
+        console.log("Hello from lightweight bundle");
+      },
+      {}
+    ]
+  },
+  "&::index.js"
+);
+```
+
+This mode is useful for:
+
+* Multiple bundles sharing one runtime
+* Microfrontend architectures
+* Reducing duplicated runtime code
+
+---
+
+### 4. Dynamic / HTTP Module Usage
+
+Inside bundled code, async modules can be loaded dynamically:
+
+```js
+const remote = await requireByHttp(
+  "https://example.com/feature.js",
+  { namespace: "RemoteFeature" }
+);
+
+remote.default();
+```
+
+The remote script must self-register using DJS hooks:
+
+```js
+(function (global, modules, entry) {
+  global["*pointers"]("&registry")(modules);
+  global["*pointers"]("&require")(entry);
+})(window,
+  {
+    "RemoteFeature::feature.js": [
+      function (require, exports) {
+        exports.default = () => console.log("Loaded remotely");
+      },
+      {}
+    ]
+  },
+  "RemoteFeature::feature.js"
+);
+```
+
+---
+
+### 5. What Your Bundler Must Do
+
+At minimum, a DJS-compatible bundler needs to:
+
+* Normalize module IDs → `Namespace::path`
+* Convert ES modules to CommonJS-style factories
+* Produce a dependency mapping per module
+* Inject modules + entry ID into `template.js`
+
+Everything else (execution, caching, loading, isolation) is handled by the runtime.
+
+---
+
+---
+
+## Versioning Policy
+
+* Each version folder is immutable
+* No breaking changes inside a version
+* New capabilities are introduced via new versions
+
+This guarantees long-term reproducibility.
+
+---
 
 ## License
 

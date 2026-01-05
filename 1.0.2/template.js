@@ -305,10 +305,7 @@
     }
 
     function remoteRequire(key, attributes = {}) {
-      if (!attributes.hasOwnProperty("assert")) {
-        attributes.assert = {};
-      }
-      attributes.assert.address = key;
+      attributes.address = key;
       return requireByHttp(mapping[key], attributes);
     }
 
