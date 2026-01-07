@@ -112,7 +112,7 @@ function Window() {
     pathname: "/",
     port: "",
     protocol: "https:",
-    crossOrigin: "https://www.microfrontends.com/",
+    crossOrigin: "https://djsmicrofrontends.netlify.app/",
     
     /**
      * Simulates window.location.assign(url)
