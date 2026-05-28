@@ -1,6 +1,8 @@
-# DJS (Distributed JavaScript Modules)
+# DJS (Distributed JavaScript Runtime)
 
 DJS is a lightweight, versioned JavaScript runtime and module execution model designed for **browser-based runtimes, bundlers, and compiler outputs**. Each version folder (e.g. `1.0.0`, `1.0.1`, `1.0.2`) contains a **fully self-contained runtime**, allowing predictable, reproducible builds and long-term compatibility guarantees.
+
+**Why "Distributed"?** DJS enables modules to be loaded from multiple sources (local, remote, or microfrontend bundles) while maintaining isolated namespaces. Each module executes in its own scope, preventing collisions when integrating code from different origins or build pipelines.
 
 Starting from newer versions (≥ **1.0.2**), DJS evolves from a simple module executor into a **runtime-grade loader** with dynamic HTTP imports, CSS polyfills, micro‑frontend compatibility, and deterministic test tooling.
 
@@ -18,7 +20,7 @@ Starting from newer versions (≥ **1.0.2**), DJS evolves from a simple module e
 
 ## Features (Latest Runtime)
 
-* Distributed JavaScript module execution
+* Module execution with namespace isolation
 * Synchronous and asynchronous (`HTTP`) module loading
 * Versioned runtime directories for stable behavior
 * Namespace-based module resolution (`Namespace::path`)
@@ -129,14 +131,21 @@ Bundlers **must always emit factories with all four parameters**, even if some a
 
 * **`requireByHttp`**
 
-  * Asynchronous loader for HTTP / remote modules
-  * Used for dynamic imports, CSS, JSON, and microfrontend bundles
+   * Asynchronous loader for HTTP / remote modules
+   * Used for dynamic imports, CSS, JSON, and microfrontend bundles
+   * Called inside factory with dependency mapping
 
-```js
-const feature = await requireByHttp("https://cdn.example.com/feature.js", {
-  namespace: "RemoteFeature"
-});
-```
+ **Relative path (same bundle):**
+ ```js
+ const rpc = await requireByHttp("./dynamic/rpc.js");
+ ```
+
+ **External URL (separate bundle):**
+ ```js
+ const feature = await requireByHttp("https://cdn.example.com/feature.js", {
+   namespace: "RemoteFeature"
+ });
+ ```
 
 ### Design Rationale
 
@@ -360,48 +369,98 @@ This mode is useful for:
 
 ### 4. Dynamic / HTTP Module Usage
 
-Inside bundled code, async modules can be loaded dynamically:
+Inside the factory function, modules are resolved through the dependency mapping.
 
+**Relative path (same bundle via mapping):**
 ```js
-const remote = await requireByHttp(
-  "https://example.com/feature.js",
-  { namespace: "RemoteFeature" }
-);
-
-remote.default();
+// Mapping: "./dynamic/rpc.js" → "&::dynamic/rpc.js"
+const rpc = await requireByHttp("./dynamic/rpc.js");
 ```
 
-The remote script must self-register using DJS hooks:
-
+**Relative path with custom namespace:**
 ```js
-(function (global, modules, entry) {
-  global["*pointers"]("&registry")(modules);
-  global["*pointers"]("&require")(entry);
-})(window,
-  {
-    "RemoteFeature::feature.js": [
-      function (require, exports) {
-        exports.default = () => console.log("Loaded remotely");
-      },
-      {}
-    ]
-  },
-  "RemoteFeature::feature.js"
-);
+// Mapping: "./dynamic/styles.css" → "DynamicCSS::dynamic/styles.css"
+const styles = await requireByHttp("./dynamic/styles.css", {
+  namespace: "DynamicCSS"
+});
+```
+
+**External URL (separate bundle):**
+```js
+// Mapping: "https://cdn.example.com/feature.js" → "RemoteFeature::feature.js"
+const remote = await requireByHttp("https://cdn.example.com/feature.js", {
+  namespace: "RemoteFeature"
+});
 ```
 
 ---
 
-### 5. What Your Bundler Must Do
+### Real-world Example: ngapack Integration
 
-At minimum, a DJS-compatible bundler needs to:
+DJS powers [ngapack](https://github.com/dimaspandu/ngapack), a custom bundler that compiles ESM to DJS format:
 
-* Normalize module IDs → `Namespace::path`
-* Convert ES modules to CommonJS-style factories
-* Produce a dependency mapping per module
-* Inject modules + entry ID into `template.js`
+**Input (ESM):**
+```js
+const somewhere = await import(
+  "https://micro.somewhere.com/message.js",
+  { namespace: "MicroFrontend" }
+);
+console.log(somewhere.default);
+```
 
-Everything else (execution, caching, loading, isolation) is handled by the runtime.
+**Output (DJS - Entry bundle):**
+```js
+(function (GlobalConstructor, global, modules, entry) {
+  /* runtime.js content */
+})(
+  typeof window !== "undefined" ? Window : this,
+  typeof window !== "undefined" ? window : this,
+  {
+    "&::index.js": [
+      function (require, exports, module, requireByHttp) {
+        // Path resolved via dependency mapping
+        // Mapping: "https://micro.somewhere.com/message.js" → "MicroFrontend::message.js"
+        const somewhere = requireByHttp(
+          "https://micro.somewhere.com/message.js"
+        );
+        console.log(somewhere.default);
+      },
+      {
+        "https://micro.somewhere.com/message.js": "MicroFrontend::message.js"
+      }
+    ]
+  },
+  "&::index.js"
+);
+```
+
+**Output (DJS - Remote bundle at `https://micro.somewhere.com/message.js`):**
+```js
+!function(e) {
+  e["*pointers"]("&registry")({
+    "MicroFrontend::message.js": [
+      function(e, n, o, i) {
+        n.default = "Hello! I'm from somewhere!"
+      },
+      {}
+    ]
+  }), e["*pointers"]("&require")("MicroFrontend::message.js")
+}("undefined" != typeof window ? window : this);
+```
+
+---
+```js
+!function(e) {
+  e["*pointers"]("&registry")({
+    "MicroFrontend::message.js": [
+      function(e, n, o, i) {
+        n.default = "Hello! I'm from somewhere!"
+      },
+      {}
+    ]
+  }), e["*pointers"]("&require")("MicroFrontend::message.js")
+}("undefined" != typeof window ? window : this);
+```
 
 ---
 
@@ -409,11 +468,11 @@ Everything else (execution, caching, loading, isolation) is handled by the runti
 
 ## Versioning Policy
 
-* Each version folder is immutable
-* No breaking changes inside a version
-* New capabilities are introduced via new versions
+Each version folder is immutable. No breaking changes inside a version. New capabilities are introduced via new versions.
 
 This guarantees long-term reproducibility.
+
+---
 
 ---
 
