@@ -2,9 +2,11 @@
 
 DJS is a lightweight, versioned JavaScript runtime and module execution model designed for **browser-based runtimes, bundlers, and compiler outputs**. Each version folder (e.g. `1.0.0`, `1.0.1`, `1.0.2`) contains a **fully self-contained runtime**, allowing predictable, reproducible builds and long-term compatibility guarantees.
 
+`src/` holds the **latest runtime snapshot** (`1.1.0`). Released version folders are never modified; `src/` is where new capabilities land before the next tag is cut.
+
 **Why "Distributed"?** DJS enables modules to be loaded from multiple sources (local, remote, or microfrontend bundles) while maintaining isolated namespaces. Each module executes in its own scope, preventing collisions when integrating code from different origins or build pipelines.
 
-Starting from newer versions (≥ **1.0.2**), DJS evolves from a simple module executor into a **runtime-grade loader** with dynamic HTTP imports, CSS polyfills, micro‑frontend compatibility, and deterministic test tooling.
+Starting from newer versions (≥ **1.0.2**), DJS evolves from a simple module executor into a **runtime-grade loader** with dynamic HTTP imports, CSS polyfills, micro‑frontend compatibility, and deterministic test tooling. As of **1.1.0**, the latest runtime in `src/` also accepts `.jsx` module IDs.
 
 ---
 
@@ -24,6 +26,7 @@ Starting from newer versions (≥ **1.0.2**), DJS evolves from a simple module e
 * Synchronous and asynchronous (`HTTP`) module loading
 * Versioned runtime directories for stable behavior
 * Namespace-based module resolution (`Namespace::path`)
+* Supported module extensions: `.js`, `.mjs`, `.jsx`, `.json`, `.css`, `.svg`, `.xml`, `.html`
 * Built-in CSSStyleSheet + `adoptedStyleSheets` polyfill
 * Dynamic `<script>` injection for remote modules
 * Internal module caching (sync + async)
@@ -96,6 +99,39 @@ Each runtime version includes:
 * **`require(id)`** — synchronous resolver
 * **`requireByHttp(id)`** — async HTTP-based loader
 * **`registry(modules)`** — external injection hook
+
+### Supported Extensions
+
+`require()` and `requireByHttp()` resolve module IDs through an explicit allowlist. An unsupported extension is ignored and returns nothing.
+
+| Extension | Support |
+| --------- | ------- |
+| `.js`     | all versions |
+| `.mjs`    | all versions |
+| `.jsx`    | ≥ 1.1.0 (`src/`) |
+| `.json`   | all versions |
+| `.css`    | all versions |
+| `.svg`    | all versions |
+| `.xml`    | all versions |
+| `.html`   | all versions |
+
+```js
+// src/template.js and src/runtime.js
+function isSupportedExtension(ext) {
+  return (
+    ext === ".js"  ||
+    ext === ".mjs" ||
+    ext === ".jsx"||
+    ext === ".json"||
+    ext === ".css" ||
+    ext === ".svg" ||
+    ext === ".xml" ||
+    ext === ".html"
+  );
+}
+```
+
+> Extending this list is a deliberate act — it is a safety boundary, not a formality.
 
 ---
 
@@ -188,6 +224,18 @@ This guarantees consistent styling behavior across environments.
 
 ```
 djs/
+├─ src/               # latest runtime snapshot (1.1.0)
+│  ├─ dynamic/
+│  ├─ resources/
+│  ├─ env.mock.js
+│  ├─ run.test.js
+│  ├─ runtime.js
+│  ├─ template.js
+│  └─ test.html
+├─ native/            # plain-browsers example, no bundler involved
+│  ├─ public/
+│  ├─ microfrontends/
+│  └─ run.test.js
 ├─ 1.0.0/
 │  ├─ runtime.js
 │  └─ template.js
@@ -204,6 +252,10 @@ djs/
 │  ├─ runtime.js
 │  ├─ template.js
 │  └─ test.html
+├─ scripts/
+│  └─ serve.js         # zero-dependency static server for browser tests
+├─ package.json
+├─ CHANGELOG.md
 ├─ LICENSE
 └─ README.md
 ```
@@ -228,11 +280,24 @@ DJS provides a **custom browser mock** (`env.mock.js`) that simulates:
 * Namespace isolation
 * Microfrontend external modules
 
-Run tests:
+Run the latest runtime suite:
 
 ```bash
-node 1.0.2/run.test.js
+npm test          # -> node src/run.test.js
 ```
+
+Run a specific version suite:
+
+```bash
+node src/run.test.js
+node 1.0.2/run.test.js
+node 1.0.1/run.test.js
+node 1.0.0/run.test.js
+```
+
+Requires Node.js `>= 22.7`. Each suite exits with a non-zero status only if the runtime throws; per-test results are printed with `PASS` / `FAIL`.
+
+`native/` is an example of the runtime used without any bundler. `node native/run.test.js` starts two static servers (`http://localhost:1010` for the host app, `http://localhost:1234` for the remote microfrontend) and stays running until stopped — it is a browser playground, not an automated suite.
 
 All tests are designed to behave **identically** in:
 
@@ -243,13 +308,36 @@ All tests are designed to behave **identically** in:
 
 ## Browser Testing
 
-Each version may include `test.html` for real browser validation.
+`test.html` runs the exact same assertions as the Node suites, but against a real browser. It must be served over HTTP — `file://` breaks dynamic module loading.
 
-Supported environments:
+Start a zero-dependency static server for the latest runtime:
 
-* Static HTTP servers
-* Live Server
-* Sandboxes
+```bash
+npm run test:browser
+# DJS browser test: http://localhost:8080/test.html
+#   Serving: <repo>/src
+```
+
+Any directory and port can be passed through:
+
+```bash
+node scripts/serve.js src 8080
+node scripts/serve.js 1.0.2 8081
+```
+
+Results are printed to the browser console as `PASS` / `FAIL`, with a `console.table` summary — open DevTools first, then reload.
+
+The `native/` example needs two servers (host app + remote microfrontend) and ships its own launcher:
+
+```bash
+npm run test:browser:native
+# http://localhost:1010  (host app)
+# http://localhost:1234  (remote microfrontend)
+```
+
+No other server configuration is required, but any static server works:
+
+* `npx serve`, Live Server, Sandboxes
 
 Validated behaviors:
 
@@ -448,31 +536,13 @@ console.log(somewhere.default);
 }("undefined" != typeof window ? window : this);
 ```
 
----
-```js
-!function(e) {
-  e["*pointers"]("&registry")({
-    "MicroFrontend::message.js": [
-      function(e, n, o, i) {
-        n.default = "Hello! I'm from somewhere!"
-      },
-      {}
-    ]
-  }), e["*pointers"]("&require")("MicroFrontend::message.js")
-}("undefined" != typeof window ? window : this);
-```
-
----
-
----
-
 ## Versioning Policy
 
 Each version folder is immutable. No breaking changes inside a version. New capabilities are introduced via new versions.
 
-This guarantees long-term reproducibility.
+`src/` is the working snapshot for the **next** release. It follows the newest published version plus additive changes only. When a release is cut, `src/` is tagged (e.g. `1.1.0`) and the published folders stay untouched, so `1.0.0`–`1.0.2` consumers are never affected.
 
----
+This guarantees long-term reproducibility.
 
 ---
 
